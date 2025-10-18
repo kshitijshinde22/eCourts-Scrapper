@@ -13,17 +13,24 @@ def main():
     args = parser.parse_args()
 
     scraper = ECourtsScraper(headless=True)
-    date_str = datetime.today().strftime("%d/%m/%Y") if args.date=="today" else (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
-    
-    if args.all:
-        courts = scraper.get_courts(args.complex)
-        for name, code in courts.items():
-            print(f"Downloading {name}...")
-            res = scraper.download_cause_list(args.state, args.district, args.complex, code, date_str)
-            print(res)
+
+    if args.date.lower() == "today":
+        date_str = datetime.today().strftime("%d/%m/%Y")
+    elif args.date.lower() == "tomorrow":
+        date_str = (datetime.today() + timedelta(days=1)).strftime("%d/%m/%Y")
     else:
-        res = scraper.download_cause_list(args.state, args.district, args.complex, args.court, date_str)
-        print(res)
+        date_str = args.date
+
+    if args.all:
+        results = scraper.download_all_courts(args.state, args.district, args.complex, date_str)
+        for r in results:
+            print(r)
+    else:
+        if not args.court:
+            print("Please provide --court argument or use --all")
+        else:
+            res = scraper.download_cause_list(args.state, args.district, args.complex, args.court, date_str)
+            print(res)
 
     scraper.close()
 
