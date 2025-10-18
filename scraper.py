@@ -1,11 +1,14 @@
+import os
+import time
+import json
+import requests
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-import os, time, json, requests
 from datetime import datetime
 
 class ECourtsScraper:
@@ -15,15 +18,18 @@ class ECourtsScraper:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         self.wait = WebDriverWait(self.driver, 20)
         self.base_url = "https://services.ecourts.gov.in/ecourtindia_v6/?p=cause_list/"
         os.makedirs("downloads", exist_ok=True)
         os.makedirs("results", exist_ok=True)
 
-    # -------------------------
+    # -----------------------------
     # Dropdown fetchers
-    # -------------------------
+    # -----------------------------
     def get_states(self):
         self.driver.get(self.base_url)
         select = Select(self.wait.until(EC.presence_of_element_located((By.ID, "sess_state_code"))))
@@ -48,9 +54,9 @@ class ECourtsScraper:
         select = Select(self.wait.until(EC.presence_of_element_located((By.ID, "court_code"))))
         return {o.text.strip(): o.get_attribute("value") for o in select.options[1:]}
 
-    # -------------------------
+    # -----------------------------
     # Download cause list
-    # -------------------------
+    # -----------------------------
     def download_cause_list(self, state_code, district_code, complex_code, court_code, date_str):
         try:
             self.driver.get(self.base_url)
@@ -79,10 +85,11 @@ class ECourtsScraper:
             # else HTML table
             rows = self.driver.find_elements(By.XPATH, "//table//tr")
             data = []
-            headers = [th.text for th in rows[0].find_elements(By.TAG_NAME, "th")]
-            for row in rows[1:]:
-                cols = row.find_elements(By.TAG_NAME, "td")
-                data.append({headers[i]: cols[i].text for i in range(len(cols))})
+            if len(rows) > 1:
+                headers = [th.text for th in rows[0].find_elements(By.TAG_NAME, "th")]
+                for row in rows[1:]:
+                    cols = row.find_elements(By.TAG_NAME, "td")
+                    data.append({headers[i]: cols[i].text for i in range(len(cols))})
             json_file = f"results/cause_{court_code}_{date_str.replace('/','-')}.json"
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -90,6 +97,15 @@ class ECourtsScraper:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def download_all_courts(self, state_code, district_code, complex_code, date_str):
+        courts = self.get_courts(complex_code)
+        results = []
+        for name, code in courts.items():
+            print(f"Downloading {name}...")
+            res = self.download_cause_list(state_code, district_code, complex_code, code, date_str)
+            results.append(res)
+        return results
 
     def close(self):
         self.driver.quit()
